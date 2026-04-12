@@ -22,6 +22,10 @@ conda create --name soccertwos python=3.8 -y
 
 conda activate soccertwos
 
+If using a HPC, check for an anaconda module and use it.
+module avail anaconda
+module load anaconda3
+
 ### 3. Downgrade build tools for compatibility
 pip install pip==23.3.2 setuptools==65.5.0 wheel==0.38.4
 
