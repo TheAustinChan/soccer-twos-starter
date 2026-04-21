@@ -20,6 +20,7 @@ Passing
 Scoring by default 
 Attacker gets close to ball
 Attacker possesses the ball to avoid enemy
+Minimize team conflict of ball possesion
 
 Need to minimize as well the amount of extra rewarding we do or rank them by weight
 
