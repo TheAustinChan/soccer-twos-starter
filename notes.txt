@@ -11,3 +11,16 @@ Get rewards from sent info of decision & terminal steps from self.env.get_steps(
 Affect observation to decrease sparsity of rewards so we get rewards more often have more data:
 Defender 0 minimize dist id 0 from goal position -> learn what the environment looks like in terms of spacing, 
 How do we get collision or infer collision,  observation can add in prior ball info
+
+Rewards:
+
+Ball possession
+Blocking
+Passing
+Scoring by default 
+Attacker gets close to ball
+Attacker possesses the ball to avoid enemy
+
+Need to minimize as well the amount of extra rewarding we do or rank them by weight
+
+Reward heirarchy have to rank the importance of each reward that we have, perhaps along some function or something
