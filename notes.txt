@@ -27,6 +27,8 @@ simple passing is just moving towards
 pass_encouraging_reward = (dist(member we assume close to enemy, its closest enemy) + dist(member without ball further from an enemy, its closest enemy)) something like this
 to encourage highest reward for when we want to pass
 
+Penalty for holding ball without shooting or passing
+
 Need to minimize as well the amount of extra rewarding we do or rank them by weight
 
 Reward heirarchy have to rank the importance of each reward that we have, perhaps along some function or something
