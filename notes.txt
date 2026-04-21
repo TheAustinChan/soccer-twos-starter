@@ -21,6 +21,11 @@ Scoring by default
 Attacker gets close to ball
 Attacker possesses the ball to avoid enemy
 Minimize team conflict of ball possesion
+Pass when blocked by an enemy
+simple passing is just moving towards
+
+pass_encouraging_reward = (dist(member we assume close to enemy, its closest enemy) + dist(member without ball further from an enemy, its closest enemy)) something like this
+to encourage highest reward for when we want to pass
 
 Need to minimize as well the amount of extra rewarding we do or rank them by weight
 
