@@ -62,12 +62,12 @@ class CombinedCallback(DefaultCallbacks):
     def on_train_result(self, *, trainer, result, **kwargs):
         iteration = result["training_iteration"]
 
-        if iteration % 200 == 0:
+        if iteration % 50 == 0:
             if self.current_task < len(tasks) - 1:
                 self.current_task += 1
                 print(f"---- Curriculum -> Task {self.current_task}: {tasks[self.current_task]['name']} ----")
 
-        if iteration > 1000 and iteration % 200 == 0:
+        if iteration > 250 and iteration % 20 == 0:
             print("---- Updating opponents ----")
             weights = trainer.get_weights()
             trainer.set_weights({
@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     analysis = tune.run(
         "PPO",
-        name="PPO_selfplay_rec_reg_mod_new",
+        name="PPO_selfplay_full",
         config={
             # system settings
             "num_gpus": 0,
@@ -122,7 +122,7 @@ if __name__ == "__main__":
             "rollout_fragment_length": 5000,
             "batch_mode": "complete_episodes",
         },
-        stop={"timesteps_total": 15000000, "time_total_s": 7200,},  # 2h
+        stop={"timesteps_total": 15000000, "time_total_s": 42000,},  # 2h
         checkpoint_freq=100,
         checkpoint_at_end=True,
         local_dir="./ray_results",
