@@ -23,5 +23,15 @@ export RAY_DISABLE_DASHBOARD=1
 export RAY_DASHBOARD_HOST=127.0.0.1
 
 # Run the training script
-python example_ray_ppo_sp_still.py
-
+export SOCCER_PORT_OFFSET=$((RANDOM % 1000 * 24))
+echo "Cleaning up lingering Unity processes..."
+ray stop --force
+# Unity binary is `soccer-twos.x86_64` (dash); old `SoccerTwos` pattern
+# never matched and left zombies holding Unity ports.
+pkill -9 -u "$USER" -f Unity.            || true
+pkill -9 -u "$USER" -f soccer-twos       || true
+pkill -9 -u "$USER" -f SoccerTwos        || true
+pkill -9 -u "$USER" -f train_mappo       || true
+pkill -9 -u "$USER" -f train_ppo_dense   || true
+sleep 10
+python train_ray_selfplay_mod.py

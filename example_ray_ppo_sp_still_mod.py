@@ -1,4 +1,17 @@
+import os
+import logging
+
+os.environ["RAY_DISABLE_DASHBOARD"] = "1"
+os.environ["RAY_METRICS_EXPORT_PORT"] = "-1"
+os.environ["RAY_USAGE_STATS_ENABLED"] = "0"
+os.environ["RAY_GRAFANA_HOST"] = "127.0.0.1"
+os.environ["RAY_PROMETHEUS_HOST"] = "127.0.0.1"
+
 import ray
+
+# Reduce logging noise
+logging.getLogger("ray").setLevel(logging.ERROR)
+
 from ray import tune
 from soccer_twos import EnvType
 
@@ -9,18 +22,13 @@ NUM_ENVS_PER_WORKER = 3
 
 
 if __name__ == "__main__":
-    ray.shutdown()
     ray.init(
-        num_gpus=0,
-        num_cpus=10,
         ignore_reinit_error=True,
-        _system_config={
-            "raylet_heartbeat_period_milliseconds": 5000,     # default 1000
-            "num_heartbeats_timeout": 30,                      # more tolerance
-            "object_timeout_milliseconds": 30000,
-            }
+        include_dashboard=False,
+        _node_ip_address="127.0.0.1",
+        _metrics_export_port=-1   # ⭐ THIS is the key
     )
-    
+
     tune.registry.register_env("Soccer", create_rllib_env)
 
     analysis = tune.run(
@@ -29,8 +37,9 @@ if __name__ == "__main__":
         config={
             # system settings
             "num_gpus": 0,
-            "num_workers": 8,
+            "num_workers": 2,
             "num_envs_per_worker": NUM_ENVS_PER_WORKER,
+            "base_port": BASE_PORT,
             "log_level": "INFO",
             "framework": "torch",
             # RL setup
@@ -48,10 +57,10 @@ if __name__ == "__main__":
                 "fcnet_hiddens": [512],
             },
             "rollout_fragment_length": 500,
-            "train_batch_size": 4000,
+            "train_batch_size": 12000,
         },
         stop={
-            "timesteps_total": 2000000,  # 15M
+            "timesteps_total": 20000000,  # 15M
             # "time_total_s": 14400, # 4h
         },
         checkpoint_freq=100,
