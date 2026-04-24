@@ -123,7 +123,7 @@ if __name__ == "__main__":
             "batch_mode": "complete_episodes",
         },
         stop={"timesteps_total": 15000000, "time_total_s": 7200,},  # 2h
-        checkpoint_freq=100,
+        checkpoint_freq=20,
         checkpoint_at_end=True,
         local_dir="./ray_results",
         # restore="./ray_results/PPO_selfplay_twos_2/PPO_Soccer_a8b44_00000_0_2021-09-18_11-13-55/checkpoint_000600/checkpoint-600",
