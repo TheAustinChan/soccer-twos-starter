@@ -63,10 +63,10 @@ class RLLibWrapper(gym.core.Wrapper, MultiAgentEnv):
             b_pos = np.array(info["ball_info"]["position"], dtype=np.float32)
             
             if agent_id < 2:
-                opp_goal_pos = np.array([14.0, 0.0], dtype=np.float32)
+                opp_goal_pos = np.array([16.0, 0.0], dtype=np.float32)
                 teammate_id = 1 - agent_id
             else:
-                opp_goal_pos = np.array([-14.0, 0.0], dtype=np.float32)
+                opp_goal_pos = np.array([-16.0, 0.0], dtype=np.float32)
                 teammate_id = 5 - agent_id # 2->3, 3->2
 
             t_pos = np.array(infos.get(teammate_id, {}).get("player_info", {}).get("position", p_pos), dtype=np.float32)
@@ -96,7 +96,7 @@ class RLLibWrapper(gym.core.Wrapper, MultiAgentEnv):
             ball_prev = np.array(prev_info["ball_info"]["position"])
             player_prev = np.array(prev_info["player_info"]["position"])
             
-            opp_goal = np.array([14.0, 0.0]) if agent_id < 2 else np.array([-14.0, 0.0])
+            opp_goal = np.array([16.0, 0.0]) if agent_id < 2 else np.array([-16.0, 0.0])
 
             # Distances
             d_pb_curr = np.linalg.norm(ball_curr - player_curr)
