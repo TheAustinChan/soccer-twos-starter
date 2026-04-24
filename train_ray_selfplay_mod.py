@@ -6,7 +6,7 @@ import yaml
 from utils_mod import create_rllib_env, sample_pos_vel, sample_player
 
 NUM_ENVS_PER_WORKER = 2
-BASE_PORT = 4549
+BASE_PORT = 5555
 # ---------------------------
 # Load curriculum
 # ---------------------------
