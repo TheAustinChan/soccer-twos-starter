@@ -1,148 +1,217 @@
 from random import uniform as randfloat
 
-import gym
-from ray.rllib import MultiAgentEnv
-import soccer_twos
-
 import numpy as np
 import gym
+from ray.rllib import MultiAgentEnv
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import soccer_twos
+
+# ---------------------------
+# Field constants
+# ---------------------------
+# Verify these against your Unity environment's actual goal post positions.
+# Field: x=[-14, 14], y=[-5, 5]
+GOAL_POS_TEAM_A = np.array([16.0, 0.0], dtype=np.float32)   # Team A attacks toward +x
+GOAL_POS_TEAM_B = np.array([-16.0, 0.0], dtype=np.float32)  # Team B attacks toward -x
+
+# Team layout
+TEAM_A = [0, 1]
+TEAM_B = [2, 3]
+
+# ---------------------------
+# Reward shaping weights
+# ---------------------------
+GOAL_REWARD_SCALE    = 10.0   # Scale sparse goal reward so it dominates shaping
+BALL_TO_GOAL_WEIGHT  = 1.0    # Ball moving toward opponent goal
+PLAYER_TO_BALL_WEIGHT = 0.1   # Player moving toward ball (small — don't hover)
+TOUCH_BONUS          = 0.3    # One-time bonus for making contact with ball
+POSSESSION_BONUS     = 0.3    # One-time bonus for gaining possession (not per-step)
+TOUCH_RADIUS         = 0.5    # Distance threshold to count as touching ball
+
 
 class RLLibWrapper(gym.core.Wrapper, MultiAgentEnv):
     def __init__(self, env):
         super().__init__(env)
-        self.reward_scale = 1.0
-        self.touch_radius = 0.5
-        
-        # Tracking states
-        self.prev_infos = {}
-        self.was_touching = {}
+
+        # Curriculum task index (set by train.py callback via set_task)
+        self.current_task = 0
+
+        # Touch / possession tracking (reset each episode)
+        self.prev_infos    = {}
+        self.was_touching  = {}
         self.in_possession = {}
 
-        # Update observation space: Raycasts (336) + Rel Vectors (6) = 342
+        # Observation space: original raycasts + 6 relative features
+        #   rel_ball (2) + rel_goal (2) + rel_teammate (2)
         orig_shape = self.env.observation_space.shape[0]
         self.observation_space = gym.spaces.Box(
-            low=-np.inf, high=np.inf, shape=(orig_shape + 6,), dtype=np.float32
+            low=-np.inf,
+            high=np.inf,
+            shape=(orig_shape + 6,),
+            dtype=np.float32,
         )
 
+    # ------------------------------------------------------------------
+    # Curriculum task setter — called by train.py foreach_worker callback
+    # ------------------------------------------------------------------
+    def set_task(self, task_id: int):
+        self.current_task = task_id
+
+    # ------------------------------------------------------------------
+    # Team helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _get_team(agent_id: int):
+        return TEAM_A if agent_id in TEAM_A else TEAM_B
+
+    @staticmethod
+    def _get_teammate_id(agent_id: int):
+        team = TEAM_A if agent_id in TEAM_A else TEAM_B
+        return [i for i in team if i != agent_id][0]
+
+    @staticmethod
+    def _get_opp_goal(agent_id: int) -> np.ndarray:
+        """Return the goal the agent is attacking toward."""
+        return GOAL_POS_TEAM_A if agent_id in TEAM_A else GOAL_POS_TEAM_B
+
+    # ------------------------------------------------------------------
+    # Reset
+    # ------------------------------------------------------------------
     def reset(self):
         obs = self.env.reset()
-        self.prev_infos = {} # Reset tracking on new episode
-        self.was_touching = {}
+        self.prev_infos    = {}
+        self.was_touching  = {}
         self.in_possession = {}
-        
-        # Get initial positions if available from base wrapper
         infos = getattr(self.env, "prev_infos", {})
         return self._modify_obs(obs, infos)
 
+    # ------------------------------------------------------------------
+    # Step
+    # ------------------------------------------------------------------
     def step(self, action_dict):
-        # Unity safety: Don't step if RLlib sends an empty dict
         if not action_dict:
             return {}, {}, {"__all__": False}, {}
 
         obs, rewards, dones, infos = self.env.step(action_dict)
 
-        # Order matters: Modify rewards BEFORE updating prev_infos
+        # Modify rewards BEFORE updating prev_infos (needs previous frame)
         rewards = self._modify_rewards(rewards, infos)
-        obs = self._modify_obs(obs, infos)
-        
+        obs     = self._modify_obs(obs, infos)
+
         self.prev_infos = infos
         return obs, rewards, dones, infos
 
-    def _modify_obs(self, obs_dict, infos):
+    # ------------------------------------------------------------------
+    # Observation augmentation
+    # Appends 6 relative features: rel_ball(2) + rel_goal(2) + rel_teammate(2)
+    # ------------------------------------------------------------------
+    def _modify_obs(self, obs_dict: dict, infos: dict) -> dict:
         new_obs = {}
         for agent_id, agent_obs in obs_dict.items():
             if agent_id not in infos:
-                # Fallback for frame 0
-                new_obs[agent_id] = np.concatenate([agent_obs, np.zeros(6, dtype=np.float32)])
+                # Frame 0 fallback — zeros are safe for one step
+                new_obs[agent_id] = np.concatenate(
+                    [agent_obs, np.zeros(6, dtype=np.float32)]
+                )
                 continue
 
-            info = infos[agent_id]
-            p_pos = np.array(info["player_info"]["position"], dtype=np.float32)
-            b_pos = np.array(info["ball_info"]["position"], dtype=np.float32)
-            
-            if agent_id < 2:
-                opp_goal_pos = np.array([16.0, 0.0], dtype=np.float32)
-                teammate_id = 1 - agent_id
-            else:
-                opp_goal_pos = np.array([-16.0, 0.0], dtype=np.float32)
-                teammate_id = 5 - agent_id # 2->3, 3->2
+            info        = infos[agent_id]
+            p_pos       = np.array(info["player_info"]["position"],  dtype=np.float32)
+            b_pos       = np.array(info["ball_info"]["position"],    dtype=np.float32)
+            opp_goal    = self._get_opp_goal(agent_id)
+            teammate_id = self._get_teammate_id(agent_id)
 
-            t_pos = np.array(infos.get(teammate_id, {}).get("player_info", {}).get("position", p_pos), dtype=np.float32)
+            # Fallback to own position if teammate info is missing
+            t_pos = np.array(
+                infos.get(teammate_id, {})
+                     .get("player_info", {})
+                     .get("position", p_pos),
+                dtype=np.float32,
+            )
 
-            rel_ball = b_pos - p_pos
-            rel_goal = opp_goal_pos - p_pos
-            rel_team = t_pos - p_pos
-            
-            new_obs[agent_id] = np.concatenate([agent_obs, rel_ball, rel_goal, rel_team]).astype(np.float32)
+            rel_ball     = b_pos    - p_pos
+            rel_goal     = opp_goal - p_pos
+            rel_teammate = t_pos    - p_pos
+
+            new_obs[agent_id] = np.concatenate(
+                [agent_obs, rel_ball, rel_goal, rel_teammate]
+            ).astype(np.float32)
+
         return new_obs
 
-    def _modify_rewards(self, reward_dict, infos):
-        shaped_rewards = {}
+    # ------------------------------------------------------------------
+    # Reward shaping
+    # ------------------------------------------------------------------
+    def _modify_rewards(self, reward_dict: dict, infos: dict) -> dict:
+        shaped = {}
 
         for agent_id, base_reward in reward_dict.items():
-            info = infos.get(agent_id)
-            # Use current info as prev_info fallback for the first step
-            prev_info = self.prev_infos.get(agent_id, info)
+            info      = infos.get(agent_id)
+            prev_info = self.prev_infos.get(agent_id, info)  # first-step fallback
 
             if not info or not prev_info:
-                shaped_rewards[agent_id] = base_reward
+                shaped[agent_id] = base_reward
                 continue
 
-            # Positions
-            ball_curr = np.array(info["ball_info"]["position"])
-            player_curr = np.array(info["player_info"]["position"])
-            ball_prev = np.array(prev_info["ball_info"]["position"])
-            player_prev = np.array(prev_info["player_info"]["position"])
-            
-            opp_goal = np.array([16.0, 0.0]) if agent_id < 2 else np.array([-16.0, 0.0])
+            # --- Positions ---
+            ball_curr   = np.array(info["ball_info"]["position"],      dtype=np.float32)
+            player_curr = np.array(info["player_info"]["position"],     dtype=np.float32)
+            ball_prev   = np.array(prev_info["ball_info"]["position"],  dtype=np.float32)
+            player_prev = np.array(prev_info["player_info"]["position"],dtype=np.float32)
+            opp_goal    = self._get_opp_goal(agent_id)
 
-            # Distances
+            # --- Distances ---
             d_pb_curr = np.linalg.norm(ball_curr - player_curr)
             d_pb_prev = np.linalg.norm(ball_prev - player_prev)
             d_bg_curr = np.linalg.norm(ball_curr - opp_goal)
             d_bg_prev = np.linalg.norm(ball_prev - opp_goal)
 
-            # Touch Logic
-            touching = d_pb_curr < self.touch_radius
-            touch_bonus = 1.0 if touching and not self.was_touching.get(agent_id, False) else 0.0
+            # --- Touch bonus (one-time, on contact start only) ---
+            touching    = d_pb_curr < TOUCH_RADIUS
+            touch_bonus = TOUCH_BONUS if (touching and not self.was_touching.get(agent_id, False)) else 0.0
             self.was_touching[agent_id] = touching
 
-            # Possession Logic
-            opp_ids = [2, 3] if agent_id < 2 else [0, 1]
-            opp_dists = [np.linalg.norm(np.array(infos[oid]["player_info"]["position"]) - ball_curr) 
-                         for oid in opp_ids if oid in infos]
-            
-            d_closest_opp = min(opp_dists) if opp_dists else float('inf')
-            in_pos = touching and (d_pb_curr <= d_closest_opp)
-            
-            possession_reward = 0.0
-            if in_pos:
-                possession_reward += 0.05
-                if not self.in_possession.get(agent_id, False):
-                    possession_reward += 0.2
+            # --- Possession bonus (one-time, on gaining possession only) ---
+            # Possession = touching AND closer to ball than any opponent
+            opp_ids   = TEAM_B if agent_id in TEAM_A else TEAM_A
+            opp_dists = [
+                np.linalg.norm(
+                    np.array(infos[oid]["player_info"]["position"], dtype=np.float32)
+                    - ball_curr
+                )
+                for oid in opp_ids if oid in infos
+            ]
+            d_closest_opp = min(opp_dists) if opp_dists else float("inf")
+            in_pos        = touching and (d_pb_curr <= d_closest_opp)
+
+            # Only reward the moment possession is gained, NOT every step held
+            possession_bonus = POSSESSION_BONUS if (in_pos and not self.in_possession.get(agent_id, False)) else 0.0
             self.in_possession[agent_id] = in_pos
 
-            # Combine
-            shaped_rewards[agent_id] = (
-                base_reward +
-                (d_bg_prev - d_bg_curr) * 1.0 + # Ball toward goal
-                (d_pb_prev - d_pb_curr) * 0.2 + # Player toward ball
-                touch_bonus +
-                possession_reward
+            # --- Combine ---
+            # base_reward is scaled up so sparse goal signal dominates shaping
+            shaped[agent_id] = (
+                base_reward          * GOAL_REWARD_SCALE    +
+                (d_bg_prev - d_bg_curr) * BALL_TO_GOAL_WEIGHT  +   # ball toward goal
+                (d_pb_prev - d_pb_curr) * PLAYER_TO_BALL_WEIGHT +  # player toward ball
+                touch_bonus                                      +
+                possession_bonus
             )
-            
-        return shaped_rewards
 
+        return shaped
+
+
+# ---------------------------
+# Env factory for RLLib
+# ---------------------------
 def create_rllib_env(env_config: dict = {}):
     """
-    Creates a RLLib environment and prepares it to be instantiated by Ray workers.
-    Args:
-        env_config: configuration for the environment.
-            You may specify the following keys:
-            - variation: one of soccer_twos.EnvType. Defaults to EnvType.multiagent_player.
-            - opponent_policy: a Callable for your agent to train against. Defaults to a random policy.
+    Creates and wraps a soccer_twos environment for RLLib.
+    env_config keys:
+        worker_index      : set by RLLib automatically
+        num_envs_per_worker: used to compute unique worker_id
+        base_port         : base Unity port
+        multiagent        : set False to disable multiagent wrapper
     """
     if hasattr(env_config, "worker_index"):
         env_config["worker_id"] = (
@@ -150,35 +219,42 @@ def create_rllib_env(env_config: dict = {}):
             + env_config.vector_index
         )
     env = soccer_twos.make(**env_config)
-    # env = TransitionRecorderWrapper(env)
+
     if "multiagent" in env_config and not env_config["multiagent"]:
-        # is multiagent by default, is only disabled if explicitly set to False
         return env
+
     return RLLibWrapper(env)
 
 
-def sample_vec(range_dict):
+# ---------------------------
+# Curriculum sampling helpers
+# ---------------------------
+def sample_vec(range_dict: dict) -> list:
+    """Sample a 2D [x, y] vector from a range dict with 'x' and 'y' keys."""
     return [
         randfloat(range_dict["x"][0], range_dict["x"][1]),
         randfloat(range_dict["y"][0], range_dict["y"][1]),
     ]
 
 
-def sample_val(range_tpl):
+def sample_val(range_tpl: list) -> float:
+    """Sample a scalar from a [min, max] list."""
     return randfloat(range_tpl[0], range_tpl[1])
 
 
-def sample_pos_vel(range_dict):
-    _s = {}
+def sample_pos_vel(range_dict: dict) -> dict:
+    """Sample position and/or velocity from a range dict."""
+    result = {}
     if "position" in range_dict:
-        _s["position"] = sample_vec(range_dict["position"])
+        result["position"] = sample_vec(range_dict["position"])
     if "velocity" in range_dict:
-        _s["velocity"] = sample_vec(range_dict["velocity"])
-    return _s
+        result["velocity"] = sample_vec(range_dict["velocity"])
+    return result
 
 
-def sample_player(range_dict):
-    _s = sample_pos_vel(range_dict)
+def sample_player(range_dict: dict) -> dict:
+    """Sample position, velocity, and/or rotation_y for a player."""
+    result = sample_pos_vel(range_dict)
     if "rotation_y" in range_dict:
-        _s["rotation_y"] = sample_val(range_dict["rotation_y"])
-    return _s
+        result["rotation_y"] = sample_val(range_dict["rotation_y"])
+    return result
