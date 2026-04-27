@@ -249,10 +249,10 @@ if __name__ == "__main__":
             "timesteps_total": 15_000_000,
             "time_total_s": 42_000,  # ~12 hours
         },
-        checkpoint_freq=50,
+        checkpoint_freq=25,
         checkpoint_at_end=True,
         local_dir="./ray_results",
-        restore="./ray_results/PPO_selfplay_full/PPO_Soccer_0d830_00000_0_2026-04-26_19-02-52/checkpoint_000200/checkpoint-200",
+        # restore="./ray_results/PPO_selfplay_full/checkpoint_000600/checkpoint-600",
     )
 
     best_trial = analysis.get_best_trial("episode_reward_mean", mode="max")
