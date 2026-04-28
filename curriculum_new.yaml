@@ -1,0 +1,304 @@
+# Curriculum for 2v2 soccer self-play training
+#
+# Team layout (assumed):
+#   Team A (attacking): players 0 (agent), 1 (teammate)
+#   Team B (defending): players 2, 3 (opponents)
+#
+# Field assumed:
+#   x: [-14, 14]  (negative = Team B half, positive = Team A attack direction)
+#   y: [-5, 5]    (width)
+#
+# Phases:
+#   Tasks 1-5 : Curriculum only  — no self-play, opponents fixed/far/passive
+#   Task  6   : Bridge           — one active random opponent introduced
+#   Task  7   : Full random      — all 4 players fully randomized (random_players)
+#   After yaml: Self-play takes over (controlled in train.py, not here)
+#
+# advance_threshold: mean episode reward the agent must hold for
+#   REQUIRED_CONSECUTIVE=3 consecutive evals before moving to next task.
+#   Thresholds decrease as tasks get harder. Task 7 uses 0.50 (beat random = break-even).
+
+tasks:
+
+  # -----------------------------------------------------------------------
+  # Task 1 — Very Easy Goal
+  # Ball sitting still just outside the goal. Agent faces goal.
+  # Opponents parked in their own half, facing away.
+  # Goal: learn that touching/kicking the ball toward goal = reward.
+  # -----------------------------------------------------------------------
+  - name: "Very Easy Goal"
+    advance_threshold: 0.80
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [12, 14]
+          y: [-3.0, 3.0]
+        velocity:
+          x: [0.0, 1.0]    # tiny nudge so Task 2 velocity isn't a shock
+          y: [-0.5, 0.5]
+      players:
+        0:                  # agent — close to ball, facing goal
+          rotation_y: [-30, 30]
+          position:
+            x: [8, 11]
+            y: [-3.0, 3.0]
+        1:                  # teammate — behind agent, also facing goal
+          rotation_y: [-30, 30]
+          position:
+            x: [4, 8]
+            y: [-5.0, 5.0]
+        2:                  # opponent — deep in own half, facing away
+          rotation_y: [150, 210]
+          position:
+            x: [-14, -8]
+            y: [-5.0, 5.0]
+        3:                  # opponent — deep in own half, facing away
+          rotation_y: [150, 210]
+          position:
+            x: [-14, -8]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 2 — Easy Goal
+  # Ball in attacking third with mild velocity. Agent anywhere in own half+.
+  # Opponents still passive and far away.
+  # Goal: learn to chase and redirect a slow-moving ball.
+  # -----------------------------------------------------------------------
+  - name: "Easy Goal"
+    advance_threshold: 0.72
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [7, 14]
+          y: [-4.0, 4.0]
+        velocity:
+          x: [0.0, 5.0]
+          y: [-4.0, 4.0]
+      players:
+        0:                  # agent — attacking half
+          rotation_y: [0, 360]
+          position:
+            x: [5, 13]
+            y: [-5.0, 5.0]
+        1:                  # teammate — attacking half, slightly deeper
+          rotation_y: [0, 360]
+          position:
+            x: [2, 10]
+            y: [-5.0, 5.0]
+        2:                  # opponent — still in own half
+          rotation_y: [130, 230]
+          position:
+            x: [-12, -5]
+            y: [-5.0, 5.0]
+        3:                  # opponent — still in own half
+          rotation_y: [130, 230]
+          position:
+            x: [-12, -5]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 3 — Medium Goal
+  # Ball anywhere in the attacking half with moderate velocity.
+  # Opponents creep to midfield but still face away.
+  # Goal: learn to track faster ball, handle midfield scenarios.
+  # -----------------------------------------------------------------------
+  - name: "Medium Goal"
+    advance_threshold: 0.65
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [0, 14]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-4.0, 8.0]
+          y: [-6.0, 6.0]
+      players:
+        0:                  # agent — full attacking half
+          rotation_y: [0, 360]
+          position:
+            x: [0, 13]
+            y: [-5.0, 5.0]
+        1:                  # teammate — attacking half
+          rotation_y: [0, 360]
+          position:
+            x: [-2, 10]
+            y: [-5.0, 5.0]
+        2:                  # opponent — midfield, still facing away
+          rotation_y: [130, 230]
+          position:
+            x: [-8, 0]
+            y: [-5.0, 5.0]
+        3:                  # opponent — midfield, still facing away
+          rotation_y: [130, 230]
+          position:
+            x: [-8, 0]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 4 — Hard Goal
+  # Ball anywhere on the field with full velocity range.
+  # Opponents now fully randomized in their half but facing randomly.
+  # Goal: learn to handle the full field and unpredictable ball physics.
+  # -----------------------------------------------------------------------
+  - name: "Hard Goal"
+    advance_threshold: 0.60
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [-5, 14]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-8.0, 10.0]
+          y: [-8.0, 8.0]
+      players:
+        0:                  # agent — whole field
+          rotation_y: [0, 360]
+          position:
+            x: [-5, 13]
+            y: [-5.0, 5.0]
+        1:                  # teammate — whole field
+          rotation_y: [0, 360]
+          position:
+            x: [-5, 13]
+            y: [-5.0, 5.0]
+        2:                  # opponent — own half, any rotation
+          rotation_y: [0, 360]
+          position:
+            x: [-14, 0]
+            y: [-5.0, 5.0]
+        3:                  # opponent — own half, any rotation
+          rotation_y: [0, 360]
+          position:
+            x: [-14, 0]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 5 — Full Field, Passive Opponents
+  # Ball and all players fully randomized across the whole field.
+  # Opponents still use config_fn: none (no active policy).
+  # Goal: handle any starting configuration before seeing an active opponent.
+  # -----------------------------------------------------------------------
+  - name: "Full Field Passive"
+    advance_threshold: 0.58
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [-13, 13]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-10.0, 10.0]
+          y: [-10.0, 10.0]
+      players:
+        0:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+        1:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+        2:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+        3:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 6 — One Active Opponent (Bridge Task)
+  # Introduces random_players config_fn for the first time.
+  # Only player 2 is active (random policy); player 3 still passive.
+  # This is the bridge between passive curriculum and full random opponents.
+  # Goal: learn basic defensive awareness before facing 2 active opponents.
+  # -----------------------------------------------------------------------
+  - name: "One Active Opponent"
+    advance_threshold: 0.54
+    config_fn: random_players
+    ranges:
+      ball:
+        position:
+          x: [-13, 13]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-10.0, 10.0]
+          y: [-10.0, 10.0]
+      players:
+        0:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+        1:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+        2:                  # active random opponent
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+          velocity:
+            x: [-5.0, 5.0]
+            y: [-5.0, 5.0]
+        3:                  # still passive — not yet active
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 7 — Full Random Players
+  # All 4 players fully randomized. Both opponents use random policies.
+  # This is the final curriculum task before self-play takes over.
+  # advance_threshold: 0.50 = winning more than losing vs random opponents.
+  # -----------------------------------------------------------------------
+  - name: "Full Random Players"
+    advance_threshold: 0.50
+    config_fn: random_players
+    ranges:
+      ball:
+        position:
+          x: [-13, 13]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-10.0, 10.0]
+          y: [-10.0, 10.0]
+      players:
+        0:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+        1:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+        2:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+          velocity:
+            x: [-10.0, 10.0]
+            y: [-10.0, 10.0]
+        3:
+          rotation_y: [0, 360]
+          position:
+            x: [-13, 13]
+            y: [-5.0, 5.0]
+          velocity:
+            x: [-10.0, 10.0]
+            y: [-10.0, 10.0]
