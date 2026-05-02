@@ -15,10 +15,11 @@ logging.getLogger("ray").setLevel(logging.ERROR)
 from ray import tune
 from soccer_twos import EnvType
 
-from utils import create_rllib_env
+from utils_mod_simple_ppo import create_rllib_env
 
 
-NUM_ENVS_PER_WORKER = 3
+NUM_ENVS_PER_WORKER = 2
+BASE_PORT           = 4234
 
 
 if __name__ == "__main__":
@@ -33,13 +34,13 @@ if __name__ == "__main__":
 
     analysis = tune.run(
         "PPO",
-        name="PPO_SP",
+        name="PPO_simple",
         config={
             # system settings
             "num_gpus": 0,
-            "num_workers": 2,
+            "num_workers": 16,
             "num_envs_per_worker": NUM_ENVS_PER_WORKER,
-            "base_port": BASE_PORT,
+           
             "log_level": "INFO",
             "framework": "torch",
             # RL setup
@@ -51,6 +52,7 @@ if __name__ == "__main__":
                 "single_player": True,
                 "flatten_branched": True,
                 "opponent_policy": lambda *_: 0,
+                "base_port": BASE_PORT,
             },
             "model": {
                 "vf_share_layers": True,
@@ -66,6 +68,7 @@ if __name__ == "__main__":
         checkpoint_freq=50,
         checkpoint_at_end=True,
         local_dir="./ray_results",
+        restore = "./ray_results/PPO_simple/PPO_Soccer_8cfe8_00000_0_2026-04-28_22-10-10/checkpoint_000600/checkpoint-600"
         # restore="./ray_results/PPO_selfplay_1/PPO_Soccer_ID/checkpoint_00X/checkpoint-X",
     )
 

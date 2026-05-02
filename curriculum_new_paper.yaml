@@ -1,0 +1,362 @@
+# Curriculum for 2v2 soccer self-play training
+# Structured after Samtani et al. 2021 (arXiv:2103.05174)
+#
+# Paper's core principle: gradually introduce opponents across stages.
+#   Stage 1 (1v0): agent learns basic ball control with no interference
+#   Stage 2 (1v1): agent vs one frozen opponent
+#   Stage 3 (2v2): full team vs frozen opponents → then self-play
+#
+# Since soccer_twos is hardcoded 2v2, we approximate 1v0 and 1v1 by
+# parking extra players deep in their own half, facing away, so they
+# have zero influence on the episode.
+#
+# Team layout:
+#   Team A (agent's team): players 0 (agent), 1 (teammate)
+#   Team B (opponents):    players 2, 3
+#
+# Field: x=[-16, 16], y=[-5, 5]
+# Goal posts at x=±16
+#
+# advance_threshold: mean episode reward held for REQUIRED_CONSECUTIVE=3
+# evals before advancing. Decreases as tasks get harder.
+# After Task 8 (2v2 Full Random), self-play takes over in train.py.
+
+tasks:
+
+  # =========================================================================
+  # STAGE 1 — Approximate 1v0
+  # Teammate and both opponents parked at x=[-16, -14] (far edge, out of play).
+  # Agent learns pure ball-to-goal behavior with zero interference.
+  # =========================================================================
+
+  # -----------------------------------------------------------------------
+  # Task 1 — 1v0, Ball at Goal (Very Easy)
+  # Ball sitting just outside the goal. Agent close, facing goal.
+  # Everyone else parked at far edge, facing away.
+  # Goal: learn that kicking the ball into the goal = reward.
+  # -----------------------------------------------------------------------
+  - name: "1v0 Ball at Goal"
+    advance_threshold: 0.85
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [12, 15]
+          y: [-3.0, 3.0]
+        velocity:
+          x: [0.0, 1.0]
+          y: [-0.5, 0.5]
+      players:
+        0:                    # agent — close to ball, facing goal
+          rotation_y: [-30, 30]
+          position:
+            x: [8, 12]
+            y: [-2.5, 2.5]
+        1:                    # teammate — parked far edge, irrelevant
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+        2:                    # opponent — parked far edge, facing away
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+        3:                    # opponent — parked far edge, facing away
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 2 — 1v0, Ball in Attacking Half
+  # Ball anywhere in the attacking half with mild velocity.
+  # Agent anywhere in attacking half. Everyone else still parked.
+  # Goal: learn to chase and shoot a moving ball.
+  # -----------------------------------------------------------------------
+  - name: "1v0 Attacking Half"
+    advance_threshold: 0.78
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [4, 15]
+          y: [-4.5, 4.5]
+        velocity:
+          x: [-2.0, 6.0]
+          y: [-5.0, 5.0]
+      players:
+        0:                    # agent — attacking half, any rotation
+          rotation_y: [0, 360]
+          position:
+            x: [3, 15]
+            y: [-5.0, 5.0]
+        1:                    # teammate — still parked
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+        2:                    # opponent — still parked
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+        3:                    # opponent — still parked
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 3 — 1v0, Full Field
+  # Ball anywhere on the field with full velocity.
+  # Agent anywhere on the field. Opponents still parked.
+  # Goal: handle any ball position on a full field before opponents appear.
+  # -----------------------------------------------------------------------
+  - name: "1v0 Full Field"
+    advance_threshold: 0.70
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [-15, 15]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-8.0, 8.0]
+          y: [-8.0, 8.0]
+      players:
+        0:                    # agent — full field
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        1:                    # teammate — still parked
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+        2:                    # opponent — still parked
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+        3:                    # opponent — still parked
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+
+  # =========================================================================
+  # STAGE 2 — Approximate 1v1
+  # One opponent (player 2) enters the field. Player 3 still parked.
+  # Teammate (player 1) also enters to help but agent is primary.
+  # Frozen opponent from Stage 1 best policy (set by train.py on advance).
+  # =========================================================================
+
+  # -----------------------------------------------------------------------
+  # Task 4 — 1v1, Opponent in Own Half
+  # One frozen opponent introduced but kept in their own half.
+  # Agent must now deal with a defender while trying to score.
+  # Goal: learn to play around a stationary frozen opponent.
+  # -----------------------------------------------------------------------
+  - name: "1v1 Opponent Own Half"
+    advance_threshold: 0.65
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [-5, 15]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-6.0, 8.0]
+          y: [-7.0, 7.0]
+      players:
+        0:                    # agent — full field
+          rotation_y: [0, 360]
+          position:
+            x: [-5, 15]
+            y: [-5.0, 5.0]
+        1:                    # teammate — enters field, attacking half
+          rotation_y: [0, 360]
+          position:
+            x: [-5, 12]
+            y: [-5.0, 5.0]
+        2:                    # frozen opponent — restricted to own half
+          rotation_y: [0, 360]
+          position:
+            x: [-16, -2]
+            y: [-5.0, 5.0]
+        3:                    # second opponent — still parked at edge
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 5 — 1v1, Full Field
+  # One frozen opponent anywhere on the field.
+  # Goal: handle an opponent anywhere, not just their own half.
+  # -----------------------------------------------------------------------
+  - name: "1v1 Full Field"
+    advance_threshold: 0.60
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [-15, 15]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-10.0, 10.0]
+          y: [-10.0, 10.0]
+      players:
+        0:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        1:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        2:                    # frozen opponent — anywhere on field
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        3:                    # second opponent — still parked
+          rotation_y: [150, 210]
+          position:
+            x: [-16, -14]
+            y: [-5.0, 5.0]
+
+  # =========================================================================
+  # STAGE 3 — Approximate 2v2
+  # Both opponents now on the field.
+  # Frozen opponents from Stage 2 best policy (set by train.py on advance).
+  # =========================================================================
+
+  # -----------------------------------------------------------------------
+  # Task 6 — 2v2, Both Opponents Frozen
+  # Second opponent enters the field. Both use frozen Stage 2 policy.
+  # Goal: handle a full 2v2 game against frozen opponents.
+  # -----------------------------------------------------------------------
+  - name: "2v2 Frozen Opponents"
+    advance_threshold: 0.57
+    config_fn: none
+    ranges:
+      ball:
+        position:
+          x: [-15, 15]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-10.0, 10.0]
+          y: [-10.0, 10.0]
+      players:
+        0:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        1:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        2:                    # frozen opponent — full field
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        3:                    # frozen opponent — full field
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 7 — 2v2, One Active Random Opponent (Bridge)
+  # One opponent switches to a random policy. One stays frozen.
+  # Eases the transition to fully active opponents.
+  # Goal: handle one unpredictable opponent while one is still frozen.
+  # -----------------------------------------------------------------------
+  - name: "2v2 One Random Opponent"
+    advance_threshold: 0.53
+    config_fn: random_players
+    ranges:
+      ball:
+        position:
+          x: [-15, 15]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-10.0, 10.0]
+          y: [-10.0, 10.0]
+      players:
+        0:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        1:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        2:                    # active random opponent
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+          velocity:
+            x: [-5.0, 5.0]
+            y: [-5.0, 5.0]
+        3:                    # frozen opponent — no velocity randomization
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+
+  # -----------------------------------------------------------------------
+  # Task 8 — 2v2, Both Opponents Random (Final Curriculum Task)
+  # Both opponents use random policies. Full chaos before self-play.
+  # advance_threshold: 0.50 = winning more than losing vs random = meaningful.
+  # After this task, train.py hands off to self-play.
+  # -----------------------------------------------------------------------
+  - name: "2v2 Full Random"
+    advance_threshold: 0.50
+    config_fn: random_players
+    ranges:
+      ball:
+        position:
+          x: [-15, 15]
+          y: [-5.0, 5.0]
+        velocity:
+          x: [-10.0, 10.0]
+          y: [-10.0, 10.0]
+      players:
+        0:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        1:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+        2:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+          velocity:
+            x: [-10.0, 10.0]
+            y: [-10.0, 10.0]
+        3:
+          rotation_y: [0, 360]
+          position:
+            x: [-15, 15]
+            y: [-5.0, 5.0]
+          velocity:
+            x: [-10.0, 10.0]
+            y: [-10.0, 10.0]

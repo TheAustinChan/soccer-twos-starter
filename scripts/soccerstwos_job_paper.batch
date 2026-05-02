@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Soccer Twos RL Training Job Example Batch Script for PACE
+# Author: Mili Das
+# Date: 2026
+
+# Replace gburdell3 with your GT username.
+# Replace the training script name with the actual script you want to run.
+
+#SBATCH --job-name=soccerstwos
+#SBATCH -N4 --ntasks-per-node=8
+#SBATCH --mem-per-cpu=6G
+#SBATCH -t12:00:00
+#SBATCH --output=out/soccerstwos-%j.out
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=vgetty3@gatech.edu
+
+#source ~/miniconda3/etc/profile.d/conda.sh
+source ~/.bashrc
+conda activate soccertwos
+
+export RAY_DISABLE_DASHBOARD=1
+export RAY_DASHBOARD_HOST=127.0.0.1
+
+# Run the training script
+export SOCCER_PORT_OFFSET=$((RANDOM % 1000 * 24))
+echo "Cleaning up lingering Unity processes..."
+ray stop --force
+# Unity binary is `soccer-twos.x86_64` (dash); old `SoccerTwos` pattern
+# never matched and left zombies holding Unity ports.
+pkill -9 -u "$USER" -f Unity.            || true
+pkill -9 -u "$USER" -f soccer-twos       || true
+pkill -9 -u "$USER" -f SoccerTwos        || true
+pkill -9 -u "$USER" -f train_mappo       || true
+pkill -9 -u "$USER" -f train_ppo_dense   || true
+sleep 10
+python train_ray_selfplay_new_paper.py
