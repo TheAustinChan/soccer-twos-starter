@@ -152,7 +152,7 @@ if __name__ == "__main__":
         checkpoint_at_end=True,
         local_dir="./ray_results",
         # restore="./ray_results/PPO_selfplay/checkpoint_000600/checkpoint-600",
-        #restore="../ray_results/PPO_simple/PPO_Soccer_51251_00000_0_2026-04-28_17-29-20/checkpoint_000500/checkpoint-500"
+        restore="../ray_results/PPO_selfplay_simple/PPO_Soccer_c8700_00000_0_2026-04-29_00-56-29/checkpoint_000200/checkpoint-200"
     )
 
     best_trial = analysis.get_best_trial("episode_reward_mean", mode="max")
